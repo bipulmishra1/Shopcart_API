@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from bson import ObjectId
 from fastapi import FastAPI, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +14,17 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
-# Load environment variables
-load_dotenv()
-MONGO_URI = os.getenv("MONGO_URI")
+# Import config
+from config import (
+    MONGO_URI, 
+    ACCESS_SECRET_KEY, 
+    REFRESH_SECRET_KEY, 
+    ALGORITHM, 
+    ACCESS_EXPIRE_MINUTES, 
+    REFRESH_EXPIRE_DAYS
+)
 
-# MongoDB client and collections
+# MongoDB client
 client = AsyncIOMotorClient(MONGO_URI)
 db = client["fastapi_auth"]
 products_collection = db["Project"]
@@ -36,13 +41,15 @@ async def lifespan(app: FastAPI):
         print(f"❌ MongoDB connection failed: {e}")
     yield
 
-# FastAPI application with lifespan
 app = FastAPI(lifespan=lifespan)
 
 # Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://shopcart-shopping-website.onrender.com", "http://localhost:3000"],
+    allow_origins=[
+        "https://shopcart-shopping-website.onrender.com", 
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,13 +97,9 @@ async def generic_exception_handler(request: Request, exc: Exception):
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-ACCESS_SECRET_KEY = "access_secret_key"
-REFRESH_SECRET_KEY = "refresh_secret_key"
-ALGORITHM = "HS256"
-ACCESS_EXPIRE_MINUTES = 360
-REFRESH_EXPIRE_DAYS = 7
-
+# -------------------------------
 # Models
+# -------------------------------
 class UserIn(BaseModel):
     name: str
     email: EmailStr
@@ -124,8 +127,9 @@ class RemoveItem(BaseModel):
     product_id: str
 
 
+# -------------------------------
 # Utilities
-
+# -------------------------------
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -155,8 +159,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-# Auth Routes
 
+# -------------------------------
+# Auth Routes
+# -------------------------------
 @app.post("/signup", response_model=UserOut, status_code=201)
 async def signup(user: UserIn):
     if await users_collection.find_one({"email": user.email}):
@@ -218,7 +224,10 @@ async def protected_route(current_user: dict = Depends(get_current_user)):
 async def health_check():
     return {"status": "ok"}
 
+
+# -------------------------------
 # Search Route
+# -------------------------------
 @app.get("/search/")
 async def search_mobiles(
     brand: Optional[str] = Query(None),
@@ -265,26 +274,27 @@ async def search_mobiles(
     results = []
     async for doc in cursor:
         doc["_id"] = str(doc["_id"])
-        doc["Product Photo"] = doc.get("Product Photo", "")
+        doc["Product Photo"] = doc.get("Product Photo", "").strip().split("\n")
         results.append(doc)
 
-# 🔢 Pagination Info
+    # Pagination info
     total = await products_collection.count_documents(query)
     max_pages = (total + limit - 1) // limit
 
     return {
-    "page": page,
-    "limit": limit,
-    "total_products": total,
-    "max_pages": max_pages,
-    "has_next": page < max_pages,
-    "has_prev": page > 1,
-    "products": results
-}
+        "page": page,
+        "limit": limit,
+        "total_products": total,
+        "max_pages": max_pages,
+        "has_next": page < max_pages,
+        "has_prev": page > 1,
+        "products": results
+    }
 
 
-
+# -------------------------------
 # Cart Routes
+# -------------------------------
 @app.post("/cart/add")
 async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_user)):
     try:
@@ -294,11 +304,10 @@ async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_u
     except:
         raise HTTPException(status_code=400, detail="Invalid product ID format")
 
-    # Fetch user's cart
     user = await users_collection.find_one({"email": current_user["email"]})
     cart = user.get("cart", [])
 
-    # Normalize cart format
+    # Normalize cart
     normalized_cart = []
     for i in cart:
         if isinstance(i, str):
@@ -307,7 +316,6 @@ async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_u
             normalized_cart.append(i)
     cart = normalized_cart
 
-    # Add or update product in cart
     for i in cart:
         if i["product_id"] == item.product_id:
             i["quantity"] = item.quantity
@@ -323,21 +331,14 @@ async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_u
     return {"message": f"Added {item.quantity} unit(s) to cart"}
 
 
-
-
-# Remove item from cart
-
 @app.post("/cart/remove")
 async def remove_from_cart(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(
         {"email": current_user["email"]},
         {"$pull": {"cart": {"product_id": item.product_id}}}
-
-
     )
     return {"message": "Product removed from cart"}
 
-# View cart contents
 
 @app.get("/cart")
 async def get_cart(current_user: dict = Depends(get_current_user)):
@@ -351,18 +352,12 @@ async def get_cart(current_user: dict = Depends(get_current_user)):
             if product:
                 product["_id"] = str(product["_id"])
                 product["quantity"] = item["quantity"]
-
-                # Split photo links
-                photo_str = product.get("Product Photo", "")
-                product["Product Photo"] = photo_str.strip().split("\n")
-
+                product["Product Photo"] = product.get("Product Photo", "").strip().split("\n")
                 cart_items.append(product)
         except:
             continue
 
     return JSONResponse(content=cart_items)
-
-# checkout cart clear
 
 
 @app.post("/cart/checkout")
@@ -372,9 +367,6 @@ async def checkout(current_user: dict = Depends(get_current_user)):
 
     if not cart:
         raise HTTPException(status_code=400, detail="Cart is empty")
-
-    # Create orders_collection if needed
-    orders_collection = db["orders"]
 
     await orders_collection.insert_one({
         "email": user["email"],
@@ -389,7 +381,6 @@ async def checkout(current_user: dict = Depends(get_current_user)):
 
     return {"message": "Checkout complete! Order saved."}
 
-# Other cart-related routes...
 
 @app.post("/cart/clear")
 async def clear_cart(current_user: dict = Depends(get_current_user)):
@@ -399,16 +390,19 @@ async def clear_cart(current_user: dict = Depends(get_current_user)):
     )
     return {"message": "Cart cleared"}
 
-# Add product to wishlist
+
+# -------------------------------
+# Wishlist Routes
+# -------------------------------
 @app.post("/wishlist/add")
 async def add_to_wishlist(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(
         {"email": current_user["email"]},
-        {"$addToSet": {"wishlist": item.product_id}}  # avoids duplicates
+        {"$addToSet": {"wishlist": item.product_id}}
     )
     return {"message": "Product added to wishlist"}
 
-# Remove product from wishlist
+
 @app.post("/wishlist/remove")
 async def remove_from_wishlist(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(
@@ -417,7 +411,7 @@ async def remove_from_wishlist(item: RemoveItem, current_user: dict = Depends(ge
     )
     return {"message": "Product removed from wishlist"}
 
-# wishlist ROUTE
+
 @app.get("/wishlist")
 async def get_wishlist(current_user: dict = Depends(get_current_user)):
     user = await users_collection.find_one({"email": current_user["email"]})
@@ -433,7 +427,7 @@ async def get_wishlist(current_user: dict = Depends(get_current_user)):
 
     return JSONResponse(content=wishlist_items)
 
-# Move item from wishlist to cart
+
 @app.post("/wishlist/move-to-cart")
 async def move_wishlist_to_cart(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     user = await users_collection.find_one({"email": current_user["email"]})
@@ -443,7 +437,6 @@ async def move_wishlist_to_cart(item: RemoveItem, current_user: dict = Depends(g
     if item.product_id not in wishlist:
         raise HTTPException(status_code=404, detail="Product not in wishlist")
 
-    # Normalize cart format
     normalized_cart = []
     for i in cart:
         if isinstance(i, str):
@@ -452,7 +445,6 @@ async def move_wishlist_to_cart(item: RemoveItem, current_user: dict = Depends(g
             normalized_cart.append(i)
     cart = normalized_cart
 
-    # Add or update product in cart
     for i in cart:
         if i["product_id"] == item.product_id:
             i["quantity"] += 1
