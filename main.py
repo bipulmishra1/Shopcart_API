@@ -17,6 +17,10 @@ app = FastAPI()
 def read_root():
     return {"message": "Welcome to Bipul's Shopping API!"}
 
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
 
 app.add_middleware(
     CORSMiddleware,
