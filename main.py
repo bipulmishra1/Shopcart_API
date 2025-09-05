@@ -11,6 +11,13 @@ from router.history import router as history_router
 
 app = FastAPI()
 
+
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to Bipul's Shopping API!"}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "https://your-frontend.com"],
@@ -18,6 +25,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Mount routers
 app.include_router(auth_router, prefix="/auth")
