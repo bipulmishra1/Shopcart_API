@@ -24,7 +24,9 @@ def ping():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://your-frontend.com"],
+    allow_origins=["http://localhost:3000",
+                    "https://your-frontend.com",
+                    "https://shopcart-shopping-website.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
