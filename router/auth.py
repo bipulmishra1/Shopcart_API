@@ -7,7 +7,7 @@ from config import ACCESS_SECRET_KEY, REFRESH_SECRET_KEY, ALGORITHM
 from datetime import datetime, timedelta
 import bcrypt
 
-router = APIRouter()
+router = APIRouter(tags=["Auth"])
 
 # Hash password using bcrypt
 def hash_password(password: str) -> str:
@@ -23,6 +23,7 @@ def create_refresh_token(data: dict) -> str:
     data.update({"exp": expire})
     return jwt.encode(data, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
 
+# ✅ Signup route
 @router.post("/signup", response_model=UserOut, status_code=201)
 async def signup(user: UserIn):
     if await users_collection.find_one({"email": user.email}):
@@ -41,6 +42,7 @@ async def signup(user: UserIn):
     })
     return UserOut(email=user.email)
 
+# ✅ Login route with username and email
 @router.post("/login")
 async def login(user: LoginRequest):
     db_user = await users_collection.find_one({"email": user.email})
@@ -61,10 +63,12 @@ async def login(user: LoginRequest):
         "token_type": "bearer",
         "user": {
             "email": db_user["email"],
-            "name": db_user.get("name", "")
+            "name": db_user.get("name", ""),
+            "username": db_user.get("username", db_user["email"].split("@")[0])
         }
     }
 
+# ✅ Refresh token route
 @router.post("/refresh", response_model=Token)
 async def refresh_token(body: RefreshRequest):
     try:
@@ -87,6 +91,14 @@ async def refresh_token(body: RefreshRequest):
     
     return Token(access_token=new_access, token_type="bearer")
 
+# ✅ Protected route for testing token
+@router.get("/protected")
+async def protected(current_user: dict = Depends(get_current_user)):
+    return {
+        "message": f"Welcome, {current_user['email']}! You are authenticated ✅"
+    }
+
+# ✅ Logout route
 @router.post("/logout")
 async def logout(current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(

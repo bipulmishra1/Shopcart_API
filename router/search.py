@@ -3,8 +3,9 @@ from typing import Optional
 from database import products_collection
 from bson import ObjectId
 
-router = APIRouter()
+router = APIRouter(tags=["Search"])
 
+# 🔍 Search mobiles with filters, sorting, and pagination
 @router.get("/")
 async def search_mobiles(
     brand: Optional[str] = Query(None),
@@ -67,3 +68,14 @@ async def search_mobiles(
         "has_prev": page > 1,
         "products": results
     }
+
+# 🔠 Autocomplete brand suggestions
+@router.get("/brands/autocomplete")
+async def suggest_brands(prefix: str = Query("", min_length=0)):
+    pipeline = [
+        {"$match": {"Brand": {"$regex": f"^{prefix}", "$options": "i"}}},
+        {"$group": {"_id": "$Brand"}},
+        {"$limit": 10}
+    ]
+    cursor = products_collection.aggregate(pipeline)
+    return [doc["_id"] async for doc in cursor]
