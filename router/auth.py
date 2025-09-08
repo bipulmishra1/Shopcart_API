@@ -61,11 +61,10 @@ async def login(user: LoginRequest):
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": {
-            "email": db_user["email"],
-            "name": db_user.get("name", ""),
-            "username": db_user.get("username", db_user["email"].split("@")[0])
-        }
+        "email": db_user["email"],
+        "name": db_user.get("name", ""),
+        "username": db_user.get("username", db_user["email"].split("@")[0])
+        
     }
 
 # ✅ Refresh token route
