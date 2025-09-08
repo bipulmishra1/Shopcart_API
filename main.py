@@ -32,8 +32,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://shopcart-shopping-website.onrender.com",
-        "https://new-shopping-api.vercel.app"
+        "https://shopcart-shopping-website.onrender.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
