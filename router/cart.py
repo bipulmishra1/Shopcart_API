@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 from datetime import datetime
+from fastapi.responses import JSONResponse
 from models.schemas import CartItem, RemoveItem
 from database import users_collection, products_collection
 from utils.tokens import get_current_user
@@ -20,7 +21,7 @@ async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_u
     user = await users_collection.find_one({"email": current_user["email"]})
     cart = user.get("cart", [])
 
-    # Normalize cart
+    # Normalize cart structure
     normalized_cart = []
     for i in cart:
         if isinstance(i, str):
@@ -29,6 +30,7 @@ async def add_to_cart(item: CartItem, current_user: dict = Depends(get_current_u
             normalized_cart.append(i)
     cart = normalized_cart
 
+    # Update quantity or add new item
     for i in cart:
         if i["product_id"] == item.product_id:
             i["quantity"] = item.quantity
@@ -82,7 +84,8 @@ async def checkout(current_user: dict = Depends(get_current_user)):
     order = {
         "email": user["email"],
         "items": cart,
-        "timestamp": datetime.utcnow()
+        "timestamp": datetime.utcnow(),
+        "status": "pending"
     }
     result = await users_collection.database["orders"].insert_one(order)
 
@@ -104,4 +107,3 @@ async def clear_cart(current_user: dict = Depends(get_current_user)):
         {"$set": {"cart": []}}
     )
     return {"message": "Cart cleared"}
-

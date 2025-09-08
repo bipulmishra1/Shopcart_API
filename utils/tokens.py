@@ -6,6 +6,8 @@ from config import ACCESS_SECRET_KEY, ALGORITHM
 from datetime import datetime, timedelta
 from config import ACCESS_EXPIRE_MINUTES, REFRESH_EXPIRE_DAYS, REFRESH_SECRET_KEY
 
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 

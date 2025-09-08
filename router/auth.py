@@ -1,13 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
 from models.schemas import UserIn, UserOut, LoginRequest, Token, RefreshRequest
-from utils.security import hash_password, verify_password
-from utils.tokens import create_access_token, create_refresh_token
 from database import users_collection
+from utils.tokens import create_access_token, create_refresh_token, get_current_user
 from jose import JWTError, jwt
 from config import ACCESS_SECRET_KEY, REFRESH_SECRET_KEY, ALGORITHM
-from utils.tokens import get_current_user
+from datetime import datetime, timedelta
+import bcrypt
 
 router = APIRouter()
+
+# Hash password using bcrypt
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+# Verify password using bcrypt
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+# Create refresh token with expiry
+def create_refresh_token(data: dict) -> str:
+    expire = datetime.utcnow() + timedelta(days=7)
+    data.update({"exp": expire})
+    return jwt.encode(data, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/signup", response_model=UserOut, status_code=201)
 async def signup(user: UserIn):
@@ -44,7 +58,11 @@ async def login(user: LoginRequest):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "user": {
+            "email": db_user["email"],
+            "name": db_user.get("name", "")
+        }
     }
 
 @router.post("/refresh", response_model=Token)
