@@ -69,13 +69,19 @@ async def search_mobiles(
         "products": results
     }
 
-# 🔠 Autocomplete brand suggestions
-@router.get("/brands/autocomplete")
-async def suggest_brands(prefix: str = Query("", min_length=0)):
-    pipeline = [
-        {"$match": {"Brand": {"$regex": f"^{prefix}", "$options": "i"}}},
-        {"$group": {"_id": "$Brand"}},
-        {"$limit": 10}
-    ]
-    cursor = products_collection.aggregate(pipeline)
-    return [doc["_id"] async for doc in cursor]
+@router.get("/suggestions")
+async def get_suggestions(q: str = Query(..., min_length=1)):
+    cursor = products_collection.find(
+        {"$or": [
+            {"Brand": {"$regex": q, "$options": "i"}},
+            {"Model": {"$regex": q, "$options": "i"}}
+        ]},
+        {"_id": 0, "Brand": 1, "Model": 1}
+    ).limit(10)
+
+    results = []
+    async for doc in cursor:
+        suggestion = f"{doc.get('Brand', '')} {doc.get('Model', '')}".strip()
+        results.append(suggestion)
+
+        return results
