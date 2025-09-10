@@ -84,4 +84,4 @@ async def get_suggestions(q: str = Query(..., min_length=1)):
         suggestion = f"{doc.get('Brand', '')} {doc.get('Model', '')}".strip()
         results.append(suggestion)
 
-        return results
+    return results
