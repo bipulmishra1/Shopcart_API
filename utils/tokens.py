@@ -1,12 +1,15 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from database import users_collection
-from config import ACCESS_SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError, ExpiredSignatureError
 from datetime import datetime, timedelta
-from config import ACCESS_EXPIRE_MINUTES, REFRESH_EXPIRE_DAYS, REFRESH_SECRET_KEY
-
-
+from database import users_collection
+from config import (
+    ACCESS_SECRET_KEY,
+    REFRESH_SECRET_KEY,
+    ACCESS_EXPIRE_MINUTES,
+    REFRESH_EXPIRE_DAYS,
+    ALGORITHM
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -17,11 +20,13 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, ACCESS_SECRET_KEY, algorithm=ALGORITHM)
 
+
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=REFRESH_EXPIRE_DAYS)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
@@ -29,6 +34,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         email = payload.get("sub")
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid token payload")
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Access token has expired")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid access token")
 
