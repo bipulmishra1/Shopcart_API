@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from typing import List
 
 class UserIn(BaseModel):
     name: str
@@ -40,3 +41,30 @@ class DefaultCard(BaseModel):
 
 class UserOut(BaseModel):
     email: EmailStr
+
+
+class CheckoutRequest(BaseModel):
+    payment_card_id: str
+    shipping_address: str
+
+class CheckoutItem(BaseModel):
+    product_id: str
+    quantity: int
+
+class PaymentInfo(BaseModel):
+    card_id: str
+    last4: str
+    brand: str
+    transaction_id: str
+
+class ShippingInfo(BaseModel):
+    address: str
+    tracking_id: str
+    estimated_delivery: str
+
+class OrderResponse(BaseModel):
+    order_id: str
+    transaction_id: str
+    tracking_id: str
+    estimated_delivery: str
+    message: str

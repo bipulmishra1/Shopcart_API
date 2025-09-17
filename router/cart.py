@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
-from datetime import datetime
 from fastapi.responses import JSONResponse
-from models.schemas import CartItem, RemoveItem
+from datetime import datetime
+from models.schemas import CartItem
 from database import users_collection, products_collection
 from utils.tokens import get_current_user
 
@@ -64,41 +64,6 @@ async def get_cart(current_user: dict = Depends(get_current_user)):
             continue
 
     return {"cart": cart_items}
-
-@router.post("/remove")
-async def remove_from_cart(item: RemoveItem, current_user: dict = Depends(get_current_user)):
-    await users_collection.update_one(
-        {"email": current_user["email"]},
-        {"$pull": {"cart": {"product_id": item.product_id}}}
-    )
-    return {"message": "Product removed from cart"}
-
-@router.post("/checkout")
-async def checkout(current_user: dict = Depends(get_current_user)):
-    user = await users_collection.find_one({"email": current_user["email"]})
-    cart = user.get("cart", [])
-
-    if not cart:
-        raise HTTPException(status_code=400, detail="Cart is empty")
-
-    order = {
-        "email": user["email"],
-        "items": cart,
-        "timestamp": datetime.utcnow(),
-        "status": "pending"
-    }
-    result = await users_collection.database["orders"].insert_one(order)
-
-    await users_collection.update_one(
-        {"email": user["email"]},
-        {"$set": {"cart": []}}
-    )
-
-    return {
-        "message": "Checkout complete! Order saved.",
-        "order_id": str(result.inserted_id),
-        "timestamp": order["timestamp"]
-    }
 
 @router.post("/clear")
 async def clear_cart(current_user: dict = Depends(get_current_user)):
