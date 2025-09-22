@@ -4,7 +4,7 @@ import uuid
 import logging
 
 from models.order import CheckoutResponse
-from models.checkout import CheckoutRequest
+from models.checkout import CheckoutRequest, CardPaymentRequest
 from database import users_collection, orders_collection
 from services.payment_service import PaymentService
 from services.order_service import OrderService
@@ -138,3 +138,14 @@ async def get_supported_upi_apps() -> dict:
             {"code": "MOBIKWIK", "name": "MobiKwik"},
         ]
     }
+
+@router.post("/card", status_code=200)
+async def card_checkout(data: CardPaymentRequest):
+    # Simulate card payment logic
+    if not data.card_number.startswith("4") or len(data.cvv) not in [3, 4]:
+        raise HTTPException(status_code=402, detail="Payment failed")
+
+    order_service = OrderService()
+    order = await order_service.create_order(email=data.email, amount=data.amount, method="card")
+
+    return {"message": "Payment successful", "order_id": order["id"]}

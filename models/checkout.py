@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator,constr
 from typing import Optional, Union
 from enum import Enum
+
 from models.payment import (
     PaymentMethod,
     CardPaymentData,
@@ -65,3 +66,11 @@ class CheckoutRequest(BaseModel):
         NetBankingPaymentData,
         CODPaymentData
     ]
+
+class CardPaymentRequest(BaseModel):
+    email: EmailStr
+    amount: float
+    card_number: constr(min_length=16, max_length=16)
+    expiry_month: int
+    expiry_year: int
+    cvv: constr(min_length=3, max_length=4)
