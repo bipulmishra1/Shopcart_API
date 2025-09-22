@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
-from models.schemas import RemoveItem
+from models.wishlist import RemoveItem, WishlistItem
 from database import users_collection, products_collection
 from utils.tokens import get_current_user
+from typing import List
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/wishlist", tags=["Wishlist"])
 
-@router.post("/add")
+# ✅ Add product to wishlist
+@router.post("/add", status_code=200)
 async def add_to_wishlist(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(
         {"email": current_user["email"]},
@@ -14,7 +16,8 @@ async def add_to_wishlist(item: RemoveItem, current_user: dict = Depends(get_cur
     )
     return {"message": "Product added to wishlist"}
 
-@router.post("/remove")
+# ✅ Remove product from wishlist
+@router.post("/remove", status_code=200)
 async def remove_from_wishlist(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     await users_collection.update_one(
         {"email": current_user["email"]},
@@ -22,35 +25,40 @@ async def remove_from_wishlist(item: RemoveItem, current_user: dict = Depends(ge
     )
     return {"message": "Product removed from wishlist"}
 
-@router.get("/")
+# ✅ Get wishlist items
+@router.get("/", response_model=List[WishlistItem], status_code=200)
 async def get_wishlist(current_user: dict = Depends(get_current_user)):
     user = await users_collection.find_one({"email": current_user["email"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
     product_ids = user.get("wishlist", [])
     wishlist_items = []
+
     for pid in product_ids:
         product = await products_collection.find_one({"_id": ObjectId(pid)})
         if product:
-            product["_id"] = str(product["_id"])
-            product["Product Photo"] = product.get("Product Photo", "").strip().split("\n")
-            wishlist_items.append(product)
-    return {"wishlist": wishlist_items}
+            wishlist_items.append(WishlistItem(
+                product_id=str(product["_id"]),
+                name=product["Name"],
+                price=product["Selling Price"],
+                image_url=product["Product Photo"].strip().split("\n")[0]
+            ))
 
-@router.post("/move-to-cart")
+    return wishlist_items
+
+# ✅ Move product from wishlist to cart
+@router.post("/move-to-cart", status_code=200)
 async def move_wishlist_to_cart(item: RemoveItem, current_user: dict = Depends(get_current_user)):
     user = await users_collection.find_one({"email": current_user["email"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
     wishlist = user.get("wishlist", [])
     cart = user.get("cart", [])
 
     if item.product_id not in wishlist:
         raise HTTPException(status_code=404, detail="Product not in wishlist")
-
-    normalized_cart = []
-    for i in cart:
-        if isinstance(i, str):
-            normalized_cart.append({"product_id": i, "quantity": 1})
-        else:
-            normalized_cart.append(i)
-    cart = normalized_cart
 
     for i in cart:
         if i["product_id"] == item.product_id:
@@ -61,7 +69,10 @@ async def move_wishlist_to_cart(item: RemoveItem, current_user: dict = Depends(g
 
     await users_collection.update_one(
         {"email": current_user["email"]},
-        {"$set": {"cart": cart}, "$pull": {"wishlist": item.product_id}}
+        {
+            "$set": {"cart": cart},
+            "$pull": {"wishlist": item.product_id}
+        }
     )
 
-    return {"message": "Item moved from wishlist to cart"}
+    return {"message": "Product moved to cart"}

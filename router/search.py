@@ -1,54 +1,39 @@
-from fastapi import APIRouter, Query
-from typing import Optional
+from fastapi import APIRouter, Depends
+from models.search import MobileSearchQuery
 from database import products_collection
-from bson import ObjectId
 
-router = APIRouter(tags=["Search"])
+router = APIRouter(prefix="/api/v1/search", tags=["Search"])
 
-# 🔍 Search mobiles with filters, sorting, and pagination
-@router.get("/")
-async def search_mobiles(
-    brand: Optional[str] = Query(None),
-    model: Optional[str] = Query(None),
-    color: Optional[str] = Query(None),
-    sort_by: Optional[str] = Query(None),
-    storage: Optional[str] = Query(None),
-    memory: Optional[str] = Query(None),
-    min_price: Optional[int] = Query(None),
-    max_price: Optional[int] = Query(None),
-    order: Optional[str] = Query("asc"),
-    page: int = Query(1, gt=0),
-    limit: int = Query(10, gt=0)
-):
-    skip = (page - 1) * limit
-    query = {}
+@router.get("/", status_code=200)
+async def search_mobiles(query: MobileSearchQuery = Depends()):
+    skip = (query.page - 1) * query.limit
+    filters = {}
 
-    if brand:
-        query["Brand"] = {"$regex": brand, "$options": "i"}
-    if model:
-        query["Model"] = {"$regex": model, "$options": "i"}
-    if color:
-        query["Color"] = {"$regex": color, "$options": "i"}
-    if storage:
-        query["Storage"] = storage
-    if memory:
-        query["Memory"] = memory
-    if min_price is not None and max_price is not None:
-        query["Selling Price"] = {"$gte": min_price, "$lt": max_price}
-    elif min_price is not None:
-        query["Selling Price"] = {"$gte": min_price}
-    elif max_price is not None:
-        query["Selling Price"] = {"$lt": max_price}
+    if query.brand:
+        filters["Brand"] = {"$regex": query.brand, "$options": "i"}
+    if query.model:
+        filters["Model"] = {"$regex": query.model, "$options": "i"}
+    if query.color:
+        filters["Color"] = {"$regex": query.color, "$options": "i"}
+    if query.storage:
+        filters["Storage"] = query.storage
+    if query.memory:
+        filters["Memory"] = query.memory
+    if query.min_price is not None or query.max_price is not None:
+        filters["Selling Price"] = {}
+        if query.min_price is not None:
+            filters["Selling Price"]["$gte"] = query.min_price
+        if query.max_price is not None:
+            filters["Selling Price"]["$lt"] = query.max_price
 
-    sort_field = None
-    if sort_by == "price":
-        sort_field = "Selling Price"
-    elif sort_by == "rating":
-        sort_field = "Rating"
+    sort_field = {
+        "price": "Selling Price",
+        "rating": "Rating"
+    }.get(query.sort_by)
 
-    cursor = products_collection.find(query).skip(skip).limit(limit)
+    cursor = products_collection.find(filters).skip(skip).limit(query.limit)
     if sort_field:
-        cursor = cursor.sort(sort_field, 1 if order == "asc" else -1)
+        cursor = cursor.sort(sort_field, 1 if query.order == "asc" else -1)
 
     results = []
     async for doc in cursor:
@@ -56,32 +41,15 @@ async def search_mobiles(
         doc["Product Photo"] = doc.get("Product Photo", "").strip().split("\n")
         results.append(doc)
 
-    total = await products_collection.count_documents(query)
-    max_pages = (total + limit - 1) // limit
+    total = await products_collection.count_documents(filters)
+    max_pages = (total + query.limit - 1) // query.limit
 
     return {
-        "page": page,
-        "limit": limit,
+        "page": query.page,
+        "limit": query.limit,
         "total_products": total,
         "max_pages": max_pages,
-        "has_next": page < max_pages,
-        "has_prev": page > 1,
+        "has_next": query.page < max_pages,
+        "has_prev": query.page > 1,
         "products": results
     }
-
-@router.get("/suggestions")
-async def get_suggestions(q: str = Query(..., min_length=1)):
-    cursor = products_collection.find(
-        {"$or": [
-            {"Brand": {"$regex": q, "$options": "i"}},
-            {"Model": {"$regex": q, "$options": "i"}}
-        ]},
-        {"_id": 0, "Brand": 1, "Model": 1}
-    ).limit(10)
-
-    results = []
-    async for doc in cursor:
-        suggestion = f"{doc.get('Brand', '')} {doc.get('Model', '')}".strip()
-        results.append(suggestion)
-
-    return results

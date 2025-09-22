@@ -11,6 +11,8 @@ from router.search import router as search_router
 from router.orders import router as orders_router
 from router.payments import router as payments_router
 from router.history import router as history_router
+from router.checkout import router as checkout_router
+from router.otp import router as otp_router
 
 app = FastAPI(
     title="Bipul's Shopping API",
@@ -58,9 +60,15 @@ async def shutdown_event():
 
 # Mount routers with tags for Swagger grouping
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+app.include_router(otp_router)
+app.include_router(search_router, prefix="/search", tags=["Search"])
 app.include_router(cart_router, prefix="/cart", tags=["Cart"])
 app.include_router(wishlist_router, prefix="/wishlist", tags=["Wishlist"])
-app.include_router(search_router, prefix="/search", tags=["Search"])
 app.include_router(orders_router, prefix="/orders", tags=["Orders"])
-app.include_router(payments_router, prefix="/pay", tags=["Payments"])
+app.include_router(payments_router, prefix="/payment", tags=["Payments"])
 app.include_router(history_router, prefix="/history", tags=["History"])
+app.include_router(checkout_router, prefix="/checkout", tags=["Checkout"])
+
+
+
+
