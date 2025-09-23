@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 from datetime import datetime
-from models.cart import CartItem, CartProduct, CartResponse, CartTotals
+from models.cart import CartItem, CartProduct, CartResponse, CartTotals, RemoveCartItemRequest
 from database import users_collection, products_collection
 from utils.tokens import get_current_user
 
@@ -75,3 +75,25 @@ async def clear_cart(current_user: dict = Depends(get_current_user)):
         {"$set": {"cart": []}}
     )
     return {"message": "Cart cleared"}
+
+@router.delete("/remove", status_code=200)
+async def remove_from_cart(
+    data: RemoveCartItemRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    user = await users_collection.find_one({"email": current_user["email"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cart = user.get("cart", [])
+    updated_cart = [item for item in cart if item.get("product_id") != data.product_id]
+
+    if len(cart) == len(updated_cart):
+        raise HTTPException(status_code=404, detail="Item not found in cart")
+
+    await users_collection.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"cart": updated_cart}}
+    )
+
+    return {"message": "Item removed from cart"}

@@ -1,11 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from models.auth import UserIn, UserOut, LoginRequest, Token, RefreshRequest, UserProfile, PasswordResetRequest
 from database import users_collection
-from utils.tokens import create_access_token, create_refresh_token, get_current_user
+from utils.tokens import (
+    create_access_token,
+    create_refresh_token,
+    get_current_user
+)
 from datetime import datetime
+from jose import jwt, JWTError
 import bcrypt
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
+
+SECRET_KEY = "your-secret-key"
+ALGORITHM = "HS256"
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -46,9 +54,38 @@ async def login(user: LoginRequest):
         {"$set": {"refresh_token": refresh_token}}
     )
 
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "email": db_user["email"],
+        "name": db_user.get("name", ""),
+        "username": db_user.get("username", db_user["email"].split("@")[0])
+    }
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(body: RefreshRequest):
+    try:
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    
+    user = await users_collection.find_one({"email": email})
+    if not user or user.get("refresh_token") != body.refresh_token:
+        raise HTTPException(status_code=403, detail="Refresh token has expired or is invalid")
+    
+    new_access = create_access_token({"sub": email})
+    new_refresh = create_refresh_token({"sub": email})
+
+    await users_collection.update_one(
+        {"email": email},
+        {"$set": {"refresh_token": new_refresh}}
+    )
+
     return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
+        access_token=new_access,
+        refresh_token=new_refresh,
         token_type="bearer"
     )
 
@@ -88,3 +125,17 @@ async def reset_password(data: PasswordResetRequest):
     )
 
     return {"message": "Password reset successful"}
+
+@router.get("/protected", status_code=200)
+async def protected_route(current_user: dict = Depends(get_current_user)):
+    return {"message": f"Access granted for {current_user['email']}"}
+
+
+@router.post("/logout", status_code=200)
+async def logout(current_user: dict = Depends(get_current_user)):
+    await users_collection.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"refresh_token": None}}
+    )
+    return {"message": "Logged out successfully"}
+

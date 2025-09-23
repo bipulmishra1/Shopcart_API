@@ -23,3 +23,6 @@ class CartTotals(BaseModel):
 class CartResponse(BaseModel):
     cart: list[CartProduct]
     totals: Optional[CartTotals] = None
+
+class RemoveCartItemRequest(BaseModel):
+    product_id: str
